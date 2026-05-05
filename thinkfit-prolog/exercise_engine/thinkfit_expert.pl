@@ -6,15 +6,9 @@
 :- consult('knowledge_base.pl').
 
 % ======================================================================
-% KNOWLEDGE BASE (Lab 8: Representing Domain Knowledge)
+% KNOWLEDGE BASE 
 % phase_params(PhaseName, DefaultSets, MinReps, MaxReps, ProgressionStyle).
 % ======================================================================
-
-% ======================================================================
-% FITSPHERE: DOMAIN KNOWLEDGE BASE (Lab 8)
-% ======================================================================
-
-% ----------------------------------------------------------------------
 % 1. MACROCYCLE PROGRESSIONS
 % Format: macrocycle(Goal, Duration, [phase(PhaseName, BaseWeeks)...]).
 % ----------------------------------------------------------------------
@@ -98,10 +92,13 @@ phase_params(strength_block, push_pull_legs, 5, 5, '5-8', 5, '5-8', 180, heavy_s
 % Fat Loss Arc (using 'amrap' and 'timed' for metabolic phases)
 phase_params(build_and_burn, full_body_circuit, 4, 4, '8-12', 4, '8-12', 45, double_progression).
 phase_params(peak_metabolic, mixed_modal_circuit, 4, amrap, 'timed_45_seconds', amrap, 'timed_45_seconds', 30, circuit_style).
-phase_params(foundation, 3, 8, 12, linear).
-phase_params(hypertrophy, 3, 8, 12, double_progression).
-phase_params(strength, 5, 3, 5, linear).
-phase_params(volume, 4, 10, 15, volume).
+% ---------------------------------------------------------
+% THE MUSCLE BUILDING ARC (Now fully matching the macrocycle!)
+% ---------------------------------------------------------
+phase_params(foundation_hypertrophy, upper_lower, 4, 3, '8-10', 3, '10-12', 90, form_mastery).
+phase_params(volume_surge, upper_lower, 4, 4, '8-12', 3, '12-15', 90, volume_accumulation).
+phase_params(strength_block, push_pull_legs, 5, 5, '5-8', 5, '5-8', 180, heavy_strength_linear).
+phase_params(peak_volume, push_pull_legs, 6, 4, '10-15', 4, '15-20', 60, volume_accumulation).
 
 % macrocycle(Goal, [phase(Name, DefaultWeeks)]).
 macrocycle(recomposition, [phase(foundation, 4), phase(hypertrophy, 8), phase(strength, 4)]).
@@ -216,8 +213,9 @@ day_index('Thursday', 3).
 day_index('Friday', 4).
 day_index('Saturday', 5).
 day_index('Sunday', 6).
-
-% Blueprint Sequences for schedule_weekly_blueprints
+% ======================================================================
+% BLUEPRINT SEQUENCES (Translating Python split_sequences)
+% ======================================================================
 blueprint_seq(full_body, [full_body_A, full_body_B, full_body_C]).
 blueprint_seq(upper_lower, [upper_day_A, lower_day_A]).
 blueprint_seq(push_pull_legs, [push_day, pull_day, leg_day]).
@@ -226,7 +224,7 @@ blueprint_seq(upper_lower_full, [upper_day_A, lower_day_A, full_body_A]).
 blueprint_seq(upperA_lowerA_upperB_lowerB, [upper_day_A, lower_day_A, upper_day_B, lower_day_B]).
 blueprint_seq(push_pull_repeated, [push_day, pull_day]).
 blueprint_seq(upperA_lowerA_upperB_lowerB_full, [upper_day_A, lower_day_A, upper_day_B, lower_day_B, full_body_A]).
-blueprint_seq(push_pull_legs_upper_lower, [push_day, pull_day, leg_day, upper_day_A, lower_day_A]).
+blueprint_seq(push_pull_legs_upper_lower, [push_day, pull_day, leg_day, upper_day_A, lower_day_A]). % PHAT training
 blueprint_seq(push_pull_legs_repeated, [push_day, pull_day, leg_day]).
 
 % Injury Stress Mapping (for W2 Rule)
@@ -234,14 +232,44 @@ injury_stress(lower_back, spinal_compression).
 injury_stress(lower_back, lumbar_shear).
 injury_stress(knee, extreme_knee_torque).
 injury_stress(knee, high_knee_torque).
+injury_stress(knee, knee_torque).
+injury_stress(knee, knees).
+injury_stress(lower_back, lower_back).
+injury_stress(shoulder, shoulder_impingement).
 
-% Phase Aliases (for W8 Rule)
+% Maps the user's primary goal to their initial training phase
+starting_phase(build_muscle, foundation_hypertrophy).
+starting_phase(lose_fat, foundation).
+starting_phase(recomposition, strength_foundation).
+starting_phase(general_health, foundation).
+% Fallback if something weird is entered
+starting_phase(_, foundation).
+
+% ======================================================================
+% PHASE TRANSLATION DICTIONARY (Internal State -> JSON Tags) W8
+% ======================================================================
+
+% Foundation Arc
 phase_alias(foundation, foundation).
 phase_alias(strength_foundation, foundation).
+phase_alias(active_lifestyle, foundation).
+
+% Recomposition Arc
 phase_alias(recomposition_1, recomposition).
+phase_alias(recomposition_1, recomposition_1).
+phase_alias(recomposition_2, recomposition).
+phase_alias(recomposition_2, recomposition_2).
+
+% Muscle Building Arc (The ones that were missing!)
 phase_alias(foundation_hypertrophy, foundation).
 phase_alias(foundation_hypertrophy, hypertrophy_volume).
+phase_alias(volume_surge, hypertrophy_volume).    % <--- This will save your current test!
+phase_alias(peak_volume, hypertrophy_volume).
+phase_alias(strength_block, strength_block).
 
+% Fat Loss Arc
+phase_alias(build_and_burn, build_and_burn).
+phase_alias(peak_metabolic, peak_metabolic).
 
 % ======================================================================
 % 1. HIGHEST TIER SCORE (Heuristic Evaluation)
@@ -309,21 +337,30 @@ determine_split(_, _, full_body, 'Fallback safety activated.').
 % Maps days to blueprints using Modulo arithmetic for an infinite rolling queue.
 % ======================================================================
 
-% recursive assignment list generator
-assign_days([], _, _, []).
-assign_days([Day|RestDays], Sequence, CurrentIndex, [(Day, Blueprint)|RestAssignments]) :-
-    length(Sequence, Len),
-    ModIndex is CurrentIndex mod Len,
-    nth0(ModIndex, Sequence, Blueprint),
-    NextIndex is CurrentIndex + 1,
-    assign_days(RestDays, Sequence, NextIndex, RestAssignments).
 
-% Main caller
-schedule_weekly_blueprints(DaysList, AssignedSplit, StartIndex, Calendar, EndIndex) :-
+% Main Wrapper: Checks if split changed, gets sequence, and rolls the queue
+schedule_weekly_blueprints(DaysList, AssignedSplit, LastAssignedSplit, SavedIndex, Calendar, NewIndex) :-
+    % 1. Reset index to 0 if the assigned split changed from last week
+    ( AssignedSplit \= LastAssignedSplit -> StartIndex = 0 ; StartIndex = SavedIndex ),
+    
+    % 2. Look up the sequence (safe fallback to full_body)
     ( blueprint_seq(AssignedSplit, Seq) -> true ; blueprint_seq(full_body, Seq) ),
+    
+    % 3. Recursively map the days using Modulo math
     assign_days(DaysList, Seq, StartIndex, Calendar),
+    
+    % 4. Calculate the final index for next week
     length(DaysList, Count),
-    EndIndex is StartIndex + Count. % The new index to save to memory
+    NewIndex is StartIndex + Count.
+
+% Recursive loop to assign days using modulo arithmetic
+assign_days([], _, _, []).
+assign_days([Day | RestDays], Seq, Index, [day(Day, DayType) | RestCal]) :-
+    length(Seq, SeqLen),
+    ModIndex is Index mod SeqLen,
+    nth0(ModIndex, Seq, DayType), % Retrieves the item at the modulo index
+    NextIndex is Index + 1,
+    assign_days(RestDays, Seq, NextIndex, RestCal).
 
 
 % ======================================================================
@@ -347,24 +384,31 @@ filter_w1_equipment(UserTier, UserTools, SafeExercises) :-
 % W2: Injury Check
 is_safe_from_injuries(ExName, UserInjuries) :-
     exercise_kb(_, ExName, _, _, ExerciseStressList, _, _, _, _, _, _, _, _, _),
+    % It is safe IF there is no overlap between the user's injuries and the exercise's stress
     \+ (member(Injury, UserInjuries), injury_stress(Injury, StressTag), member(StressTag, ExerciseStressList)).
+
 
 filter_w2_injuries(InputExercises, UserInjuries, SafeExercises) :-
     include({UserInjuries}/[Ex]>>is_safe_from_injuries(Ex, UserInjuries), InputExercises, SafeExercises).
 
-% W8: Phase Check
+% W8: Phase Matcher (Now fully alias-aware)
 is_valid_phase(ExName, CurrentPhase) :-
     exercise_kb(_, ExName, _, _, _, _, AllowedPhases, _, _, _, _, _, _, _),
-    ( member(all, AllowedPhases)
-    ; (phase_alias(CurrentPhase, Alias), member(Alias, AllowedPhases)) ).
+    ( member(all, AllowedPhases) 
+    ; member(CurrentPhase, AllowedPhases)
+    ; (phase_alias(CurrentPhase, Alias), member(Alias, AllowedPhases)) 
+    ).
 filter_w8_phase(InputExercises, CurrentPhase, ValidExercises) :-
     include({CurrentPhase}/[Ex]>>is_valid_phase(Ex, CurrentPhase), InputExercises, ValidExercises).
 
 % W3: Prehab Assembly Engine
 % Finds up to 2 prehab exercises that match the user's injuries.
-find_prehab(UserInjuries, FinalRoutine) :-
+% W3: Prehab Assembly Engine (Now with 3 arguments!)
+% Finds up to 2 prehab exercises that are safe and available in the filtered database.
+find_prehab(UserInjuries, SafeDB, FinalRoutine) :-
     findall(ExName,
-        (exercise_db(ExName, _, _, _, PrehabList, _),
+        (member(ExName, SafeDB), % Ensures we only use equipment-safe exercises
+         exercise_kb(_, ExName, _, _, _, PrehabList, _, _, _, _, _, _, _, _),
          member(Inj, UserInjuries),
          member(Inj, PrehabList)),
         AllPrehab),
@@ -374,6 +418,7 @@ find_prehab(UserInjuries, FinalRoutine) :-
 take_up_to_two([], []).
 take_up_to_two([A], [A]).
 take_up_to_two([A, B | _], [A, B]).
+
 
 % ======================================================================
 % CLASSICAL AI EXPERT SYSTEM: THE MASTER ORCHESTRATOR
@@ -423,7 +468,7 @@ assemble_routine([], _, _, _, _, []) :- !.
 assemble_routine([req(Pattern, Amount) | RestBlueprint], SafeDB, PhaseParams, History, MusclesHitToday, FinalRoutine) :-
     
     % 1. State Space Generation: Find all safe exercises matching the pattern
-    findall(Ex, (member(Ex, SafeDB), exercise_kb(Ex, _,_,_,_,_,_,_,_, Pattern)), Matching),
+    findall(Ex, (member(Ex, SafeDB), exercise_kb(_, Ex, _, _, _, _, _, _, _, _, Pattern, _, _, _)), Matching),
     
     % Handle empty matches gracefully
     ( Matching = [] ->
@@ -516,6 +561,230 @@ generate_daily_workout(UserMemory, Blueprint, PhaseName, History, FinalWorkout) 
     % Combine Prehab and Main Routine into the final plan
     append(WarmupRoutine, MainRoutine, FinalWorkout).
 
+% ======================================================================
+% WEEKLY PLAN ORCHESTRATOR (Translating Python's generate_week)
+% ======================================================================
+
+% Main entry point to generate a full 7-day week
+generate_week(MemoryList, History, WeeklyPlan) :-
+    write('[SYSTEM] Extracting User State from Memory...'), nl,
+    
+    % 1. Extract Working Memory (Replacing SQL SELECT)
+    member(goal(Goal), MemoryList),
+    member(schedule(Days), MemoryList),
+    member(duration(DurationWeeks), MemoryList),
+    member(weeks_in_program(WeekNum), MemoryList),
+    
+    % 2. Deduce Active Phase (Replacing determine_active_phase)
+    write('[SYSTEM] Deducing active macrocycle phase...'), nl,
+    macrocycle(Goal, DurationWeeks, PhasesList),
+    format('PhasesList : ~w', [PhasesList]), nl,
+    find_phase_for_week(WeekNum, PhasesList, ActivePhase),
+    format('Active Phase : ~w', [ActivePhase]), nl,
+
+    % 3. Retrieve Phase Parameters and Split Base (With Safe Fallback!)
+    ( phase_params(ActivePhase, BaseSplit, _, _, _, _, _, _, _) -> 
+        true 
+    ; 
+        write('! [SYSTEM WARNING] Missing params for '), write(ActivePhase), write('. Using foundation.'), nl,
+        phase_params(foundation, BaseSplit, _, _, _, _, _, _, _)
+    ),
+    format('Base Split : ~w', [BaseSplit]), nl,
+    
+    
+    % NEW: 3.5. Execute Safety Overrides based on User's Schedule!
+    length(Days, DaysCount),
+    determine_weekly_split(BaseSplit, DaysCount, AssignedSplit, WarningMsg),
+    
+    % Print the warning if one was triggered
+    ( WarningMsg \= none ->
+        write('! [ADAPTIVE OVERRIDE TRIGGERED] '), write(WarningMsg), nl
+    ; 
+        true 
+    ),
+    
+    % 4. Schedule Blueprints (Now using the dynamically AssignedSplit!)
+    write('[SYSTEM] Mapping split to user calendar...'), nl,
+    
+    ( member(last_assigned_split(LastSplit), MemoryList) -> true ; LastSplit = none ),
+    ( member(split_rotation_index(SavedIndex), MemoryList) -> true ; SavedIndex = 0 ),
+    
+    % Notice we pass AssignedSplit here instead of BaseSplit
+    schedule_weekly_blueprints(Days, AssignedSplit, LastSplit, SavedIndex, Calendar, NewIndex),
+
+
+    write('[SYSTEM] Next week will start at sequence index: '), write(NewIndex), nl,
+    format('Calendar ~w', [Calendar]), nl,
+    
+    % 5. Generate Workouts recursively for each day in the calendar
+    write('[SYSTEM] Assembling daily blueprints...'), nl,
+    generate_workouts_for_calendar(Calendar, BaseSplit, ActivePhase, MemoryList, History, WeeklyPlan).
+
+
+% Helper to iterate over the calendar and build the days
+generate_workouts_for_calendar([], _, _, _, _, []).
+
+% Skip rest days
+generate_workouts_for_calendar([day(DayName, rest) | RestCal], AssignedSplit, Phase, Mem, Hist, [rest_day(DayName) | RestPlan]) :-
+    generate_workouts_for_calendar(RestCal, AssignedSplit, Phase, Mem, Hist, RestPlan).
+
+% Generate actual workout days
+generate_workouts_for_calendar([day(DayName, DayType) | RestCal], AssignedSplit, Phase, Mem, Hist, [workout_day(DayName, DayType, DailyWorkout) | RestPlan]) :-
+    
+    % 🎯 The flexible string matching! (Replacing Python's if/elif block)
+    determine_library_category(DayType, AssignedSplit, Category),
+    
+    % Fetch the specific blueprint for this day
+    blueprint(Category, DayType, Blueprint),
+    
+    % Run the core AI engine for this specific day
+    generate_daily_workout(Mem, Blueprint, Phase, Hist, DailyWorkout),
+    
+    % Recursively process the rest of the week
+    generate_workouts_for_calendar(RestCal, AssignedSplit, Phase, Mem, Hist, RestPlan).
+
+
+% ======================================================================
+% SUPPORTING INFERENCE RULES
+% ======================================================================
+
+% ======================================================================
+% ADAPTIVE SPLIT ENGINE (Translating Python's determine_weekly_split)
+% ======================================================================
+
+% Helper to identify Full Body variants
+is_full_body_variant(full_body).
+is_full_body_variant(full_body_circuit).
+is_full_body_variant(mixed_modal_circuit).
+
+% 1. Full Body & Circuits Overrides
+determine_weekly_split(BaseSplit, DaysCount, BaseSplit, none) :-
+    is_full_body_variant(BaseSplit), DaysCount =< 3, !.
+determine_weekly_split(BaseSplit, 4, upperA_lowerA_upperB_lowerB, 'Doing Full Body 4 days a week limits recovery. We automatically upgraded you to an Upper/Lower split for optimal growth and joint health.') :-
+    is_full_body_variant(BaseSplit), !.
+determine_weekly_split(BaseSplit, 5, push_pull_legs_upper_lower, 'Doing Full Body 5+ days a week causes severe central nervous system fatigue. We upgraded you to a 5-Day Push/Pull/Legs/Upper/Lower hybrid.') :-
+    is_full_body_variant(BaseSplit), !.
+determine_weekly_split(BaseSplit, DaysCount, push_pull_legs_repeated, 'Doing Full Body 6+ days a week causes severe central nervous system fatigue. We upgraded you to a 6-Day Push/Pull/Legs hybrid.') :-
+    is_full_body_variant(BaseSplit), DaysCount >= 6, !.
+
+% 2. Adapting Upper/Lower Blocks
+determine_weekly_split(upper_lower, DaysCount, full_body, 'This phase is optimized for at least 3 days. To ensure you hit every muscle twice a week, we have temporarily switched your 2 days to Full Body.') :-
+    DaysCount =< 2, !.
+determine_weekly_split(upper_lower, 3, upper_lower_full, none) :- !.
+determine_weekly_split(upper_lower, 4, upperA_lowerA_upperB_lowerB, none) :- !.
+determine_weekly_split(upper_lower, 5, upperA_lowerA_upperB_lowerB_full, none) :- !.
+determine_weekly_split(upper_lower, DaysCount, upperA_lowerA_upperB_lowerB, none) :-
+    DaysCount >= 6, !.
+
+% 3. Adapting Push/Pull/Legs Blocks
+determine_weekly_split(push_pull_legs, DaysCount, full_body, 'This phase requires at least 3 days to complete a full Push/Pull/Legs cycle. We temporarily switched your 2 days to Full Body.') :-
+    DaysCount =< 2, !.
+determine_weekly_split(push_pull_legs, 3, push_pull_full, 'Standard PPL on 3 days only hits muscles once a week. We upgraded your split to Push/Pull/Full Body to double your muscle growth stimulus.') :- !.
+determine_weekly_split(push_pull_legs, 4, push_pull_repeated, none) :- !.
+determine_weekly_split(push_pull_legs, 5, push_pull_legs_upper_lower, none) :- !.
+determine_weekly_split(push_pull_legs, DaysCount, push_pull_legs_repeated, none) :-
+    DaysCount >= 6, !.
+
+% Fallback Safety (If something completely unrecognized is passed)
+determine_weekly_split(_, _, full_body, none).
+
+
+
+% Find which phase a specific week falls into (Mathematical Recursion)
+find_phase_for_week(W, [phase(P, BaseW) | _], P) :- 
+    W =< BaseW, format('Phase : ~w', [P]),!.
+find_phase_for_week(W, [phase(_, BaseW) | Rest], P) :-
+    W > BaseW,
+    NewW is W - BaseW,
+    find_phase_for_week(NewW, Rest, P).
+
+% 🎯 Flexible string matching to find the correct Blueprint Library
+determine_library_category(DayType, _, upper_lower) :-
+    (sub_atom(DayType, _, _, _, 'upper_day') ; sub_atom(DayType, _, _, _, 'lower_day')), !.
+
+determine_library_category(DayType, _, push_pull_legs) :-
+    (sub_atom(DayType, _, _, _, 'push_day') ; sub_atom(DayType, _, _, _, 'pull_day') ; sub_atom(DayType, _, _, _, 'leg_day')), !.
+
+determine_library_category(DayType, _, full_body) :-
+    sub_atom(DayType, _, _, _, 'full_body'), !.
+
+determine_library_category(_, AssignedSplit, AssignedSplit). % Fallback
+
+% Mock Scheduler (In a full app, this would dynamically distribute days)
+% Here we map a 3-day schedule to Full Body A, B, and C
+schedule_weekly_blueprints(['Monday', 'Wednesday', 'Friday'], full_body, 
+    [day('Monday', full_body_A), day('Wednesday', full_body_B), day('Friday', full_body_C)]).
+
+
+% ======================================================================
+% THE USER INTERFACE (Main Program Execution)
+% ======================================================================
+
+% Mapping symbols to mathematical weights
+tier_numeric(home, 1).
+tier_numeric(basic_gym, 2).
+tier_numeric(pro_gym, 3).
+tier_numeric(_, 1). % Fallback to home if the user types a typo
+
+% ======================================================================
+% NUMBERED MENU INTERFACES
+% ======================================================================
+
+ask_tier(Tier) :-
+    write('Select your facility tier:'), nl,
+    write('1. Home Gym'), nl,
+    write('2. Basic Gym'), nl,
+    write('3. Pro Gym'), nl,
+    write('> '), read(Choice),
+    map_tier(Choice, Tier).
+
+map_tier(1, home).
+map_tier(2, basic_gym).
+map_tier(3, pro_gym).
+map_tier(_, basic_gym). % Fallback
+
+ask_injuries(Injuries) :-
+    write('Select known injuries:'), nl,
+    write('1. None (Fully Healthy)'), nl,
+    write('2. Knee Issues'), nl,
+    write('3. Lower Back Issues'), nl,
+    write('> '), read(Choice),
+    map_injuries(Choice, Injuries).
+
+map_injuries(1, []).
+map_injuries(2, [knee]).
+map_injuries(3, [lower_back]).
+map_injuries(_, []).
+
+ask_equipment(Tools) :-
+    write('Select available equipment:'), nl,
+    write('1. Bodyweight Only'), nl,
+    write('2. Dumbbells & Bench'), nl,
+    write('3. Standard Gym (Barbell, Dumbbells, Cables)'), nl,
+    write('4. ALL Equipment (God Mode - Unlocks everything)'), nl,
+    write('> '), read(Choice),
+    map_equipment(Choice, Tools).
+
+map_equipment(1, []).
+map_equipment(2, [dumbbells, bench]).
+map_equipment(3, [dumbbells, barbell, bench, cable_machine, squat_rack]).
+map_equipment(4, [all]).
+map_equipment(_, [all]).
+
+ask_goal(Goal) :-
+    write('Select your primary fitness goal:'), nl,
+    write('1. Build Muscle'), nl,
+    write('2. Lose Fat'), nl,
+    write('3. Body Recomposition'), nl,
+    write('4. General Health'), nl,
+    write('> '), read(Choice),
+    map_goal(Choice, Goal).
+
+map_goal(1, build_muscle).
+map_goal(2, lose_fat).
+map_goal(3, recomposition).
+map_goal(4, general_health).
+map_goal(_, recomposition). % Fallback
 
 % ======================================================================
 % THE USER INTERFACE (Main Program Execution)
@@ -525,53 +794,77 @@ generate_daily_workout(UserMemory, Blueprint, PhaseName, History, FinalWorkout) 
 clear_session :-
     retractall(user_memory(_)).
 
+% ======================================================================
+% THE USER INTERFACE (Main Program Execution)
+% ======================================================================
+
 start :-
     clear_session,
     write('======================================================'), nl,
     write('      FITSPHERE: CLASSICAL AI EXPERT SYSTEM           '), nl,
     write('======================================================'), nl, nl,
     
-    % 1. Collect User Profile
+    % 1. Collect User Profile via Menus
     write('--- PROFILE SETUP ---'), nl,
-    write('Enter your facility tier (home, basic_gym, pro_gym).'), nl,
-    write('> '), read(Tier),
-    assertz(user_memory(tier(Tier))),
+    ask_tier(TierInput),
+    tier_numeric(TierInput, TierValue), 
+    assertz(user_memory(tier(TierValue))), nl,
     
-    write('Enter known injuries as a list (e.g., [lower_back] or []).'), nl,
-    write('> '), read(Injuries),
-    assertz(user_memory(injuries(Injuries))),
+    ask_injuries(Injuries),
+    assertz(user_memory(injuries(Injuries))), nl,
     
-    write('Enter available tools as a list (e.g., [dumbbells, barbell]).'), nl,
-    write('> '), read(Tools),
-    assertz(user_memory(tools(Tools))),
+    ask_equipment(Tools),
+    assertz(user_memory(tools(Tools))), nl,
     
-    % 2. Define the Daily Mission
-    write('Enter current phase (e.g., hypertrophy).'), nl,
-    write('> '), read(Phase),
+    ask_goal(Goal), nl, % <--- Ask for the Goal instead of the Phase
     
-    % For the demo, we define a static daily blueprint (e.g., a push day)
-    % In a full version, this comes from your split scheduler!
-    Blueprint = [req(horizontal_push, 2), req(glute_isolation, 1)],
+    !, % <--- THE CUT: Stops Prolog from looping back to the menus!
     
-    % 3. Run the Master Orchestrator
+    % 2. ONBOARDING INFERENCE: Deduce the Starting Phase
+    starting_phase(Goal, Phase),
+    
     write('======================================================'), nl,
-    write('[SYSTEM] Initializing State Space Search...'), nl,
-    write('[SYSTEM] Applying Problem Reduction Filters...'), nl,
-    write('[SYSTEM] Executing Heuristic Assembly...'), nl,
+    write('[SYSTEM] Onboarding Complete.'), nl,
+    write('[SYSTEM] Deduced Starting Phase: '), write(Phase), nl,
     write('======================================================'), nl, nl,
     
-    % Gather dynamic memory into a list
+    % Blueprint for the daily workout (We use a full-body setup as standard onboarding)
+    Blueprint = [req(squat_pattern, 1), req(horizontal_push, 1), req(vertical_pull, 1), req(core_stabilization, 1)],
+    
+    % --- Inside your start. rule ---
+    
+    % Set up dynamic variables that Python normally pulled from SQL
+    assertz(user_memory(goal(Goal))),
+    assertz(user_memory(schedule(['Monday', 'Tuesday', 'Thursday', 'Friday']))),
+    assertz(user_memory(duration('4_months'))),
+    assertz(user_memory(weeks_in_program(6))),
+    
+    % The variables Python normally pulls from SQL
+    assertz(user_memory(last_assigned_split(upper_lower))), 
+    assertz(user_memory(split_rotation_index(3))), % Simulating they are deep into the queue
+    
+    !, % The Cut
+    
+    % Run the Master Orchestrator for the FULL WEEK
     findall(Mem, user_memory(Mem), MemoryList),
+    generate_week(MemoryList, [], WeeklyPlan),
     
-    % Call the Orchestrator (Assuming empty history for the demo)
-    generate_daily_workout(MemoryList, Blueprint, Phase, [], FinalWorkout),
-    
-    % 4. Print the Results cleanly
-    write('>> TODAY''S OPTIMIZED PROTOCOL <<'), nl,
-    print_workout(FinalWorkout),
+    % Print the Results cleanly
+    write('>> YOUR OPTIMIZED WEEKLY PLAN <<'), nl,
+    print_weekly_plan(WeeklyPlan),
     
     write('======================================================'), nl,
-    write('Protocol generated successfully.'), nl.
+    write('Weekly Program generated successfully.'), nl.
+
+% Helper to print the weekly plan
+print_weekly_plan([]).
+print_weekly_plan([rest_day(DayName) | Rest]) :-
+    write('--- '), write(DayName), write(': REST DAY ---'), nl, nl,
+    print_weekly_plan(Rest).
+print_weekly_plan([workout_day(DayName, DayType, Workout) | Rest]) :-
+    write('--- '), write(DayName), write(' ('), write(DayType), write(') ---'), nl,
+    print_workout(Workout), nl,
+    print_weekly_plan(Rest).
 
 % Helper to cleanly print the generated nodes
 % Helper to cleanly print the generated nodes
