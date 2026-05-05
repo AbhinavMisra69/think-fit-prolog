@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThinkFit | Professional Dashboard</title>
+    <style>
+        /* Modern CSS Reset & Variables */
+        :root {
+            --bg-body: #0f172a;
+            --bg-surface: #1e293b;
+            --bg-surface-hover: #334155;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #10b981;
+            --success-hover: #059669;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --ring: rgba(59, 130, 246, 0.5);
+            --radius: 8px;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            margin: 0;
+            padding: 2rem 1rem;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 540px;
+        }
+
+        /* Branding Header */
+        .app-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .app-header h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            color: var(--text-main);
+        }
+        .app-header h1 span {
+            color: var(--primary);
+        }
+        .app-header p {
+            color: var(--text-muted);
+            margin: 0.5rem 0 0 0;
+            font-size: 0.95rem;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-surface);
+            padding: 2rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            margin-bottom: 1.5rem;
+            animation: fadeIn 0.4s ease-out;
+        }
+        
+        .card h2 {
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-main);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.75rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Form Elements */
+        .input-group {
+            margin-bottom: 1rem;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+        
+        input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--bg-body);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-sizing: border-box;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--ring);
+        }
+
+        /* Buttons */
+        button {
+            width: 100%;
+            padding: 0.875rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            margin-top: 0.5rem;
+        }
+        button:hover { background: var(--primary-hover); }
+        button:active { transform: scale(0.98); }
+        
+        .btn-success { background: var(--success); }
+        .btn-success:hover { background: var(--success-hover); }
+
+        /* Dashboard Stats */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        .stat-box {
+            background: var(--bg-body);
+            padding: 1.25rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+        .stat-value span:last-child {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        /* Search Results */
+        #searchResults {
+            margin-top: 1rem;
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .search-item {
+            padding: 0.875rem 1rem;
+            background: var(--bg-body);
+            border: 1px solid var(--border);
+            border-bottom: none;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.15s;
+        }
+        .search-item:last-child {
+            border-bottom: 1px solid var(--border);
+            border-bottom-left-radius: var(--radius);
+            border-bottom-right-radius: var(--radius);
+        }
+        .search-item:first-child {
+            border-top-left-radius: var(--radius);
+            border-top-right-radius: var(--radius);
+        }
+        .search-item:hover {
+            background: var(--bg-surface-hover);
+        }
+        .search-item-cals {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        /* Logging Section */
+        #logSection {
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+            animation: fadeIn 0.3s ease-out;
+        }
+        #selectedFoodName {
+            color: var(--primary);
+            margin: 0 0 1rem 0;
+            font-size: 1.1rem;
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="app-header">
+        <h1>Think<span>Fit</span></h1>
+        <p>Prolog Logic Engine</p>
+    </div>
+
+    <!-- ONBOARDING SCREEN -->
+    <div id="onboardingScreen" class="card">
+        <h2>Set Your Baseline</h2>
+        
+        <div class="input-group">
+            <label for="age">Age</label>
+            <input type="number" id="age" placeholder="e.g., 25" value="25">
+        </div>
+        
+        <div class="input-group">
+            <label for="weight">Weight (kg)</label>
+            <input type="number" id="weight" placeholder="e.g., 75" value="75">
+        </div>
+        
+        <div class="input-group">
+            <label for="height">Height (cm)</label>
+            <input type="number" id="height" placeholder="e.g., 175" value="175">
+        </div>
+        
+        <button onclick="saveProfile()">Calculate AI Targets</button>
+    </div>
+
+    <!-- DASHBOARD SCREEN -->
+    <div id="dashboardScreen" class="hidden">
+        
+        <!-- Daily Macros -->
+        <div class="card">
+            <h2>Today's Progress</h2>
+            <div class="stat-grid">
+                <div class="stat-box">
+                    <div class="stat-label">Calories</div>
+                    <div class="stat-value">
+                        <span id="calsUI">0</span> <span>/ <span id="targetCalsUI">0</span></span>
+                    </div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Protein</div>
+                    <div class="stat-value">
+                        <span id="protUI">0</span> <span>/ <span id="targetProtUI">0</span>g</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Food Logging -->
+        <div class="card">
+            <h2>Log Meal</h2>
+            <div class="input-group">
+                <input type="text" id="searchInput" placeholder="Search food (e.g. roti, chicken)..." onkeydown="if(event.key === 'Enter') searchFood()">
+            </div>
+            <button onclick="searchFood()">Search Database</button>
+            
+            <div id="searchResults"></div>
+            
+            <div id="logSection" class="hidden">
+                <h3 id="selectedFoodName"></h3>
+                <div class="input-group">
+                    <label for="gramsInput">Amount consumed (grams)</label>
+                    <input type="number" id="gramsInput" placeholder="100" value="100">
+                </div>
+                <input type="hidden" id="selectedFoodId">
+                <button class="btn-success" onclick="logFood()">Log to Nutrition Plan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API = 'http://localhost:5001/api';
+
+    async function saveProfile() {
+        const payload = {
+            age: parseFloat(document.getElementById('age').value),
+            weight: parseFloat(document.getElementById('weight').value),
+            height: parseFloat(document.getElementById('height').value)
+        };
+        await fetch(`${API}/onboarding`, { method: 'POST', body: JSON.stringify(payload) });
+        document.getElementById('onboardingScreen').classList.add('hidden');
+        document.getElementById('dashboardScreen').classList.remove('hidden');
+        loadDashboard();
+    }
+
+    async function loadDashboard() {
+        const res = await fetch(`${API}/dashboard`);
+        const data = await res.json();
+        
+        document.getElementById('calsUI').innerText = Math.round(data.current.cals);
+        document.getElementById('targetCalsUI').innerText = data.targets.cals;
+        document.getElementById('protUI').innerText = Math.round(data.current.prot);
+        document.getElementById('targetProtUI').innerText = data.targets.prot;
+    }
+
+    async function searchFood() {
+        const query = document.getElementById('searchInput').value;
+        if (!query) return;
+
+        const res = await fetch(`${API}/search`, { method: 'POST', body: JSON.stringify({query}) });
+        const data = await res.json();
+        
+        const resultsDiv = document.getElementById('searchResults');
+        resultsDiv.innerHTML = '';
+        
+        data.results.forEach(food => {
+            const div = document.createElement('div');
+            div.className = 'search-item';
+            div.innerHTML = `
+                <span>${food.name}</span>
+                <span class="search-item-cals">${food.cals} kcal/100g</span>
+            `;
+            div.onclick = () => selectFood(food.id, food.name);
+            resultsDiv.appendChild(div);
+        });
+
+        // Hide log section if it was open from a previous search
+        document.getElementById('logSection').classList.add('hidden');
+    }
+
+    function selectFood(id, name) {
+        document.getElementById('selectedFoodId').value = id;
+        document.getElementById('selectedFoodName').innerText = name;
+        document.getElementById('logSection').classList.remove('hidden');
+        document.getElementById('searchResults').innerHTML = ''; // Clear results after selection
+        document.getElementById('searchInput').value = ''; // Clear input
+    }
+
+    async function logFood() {
+        const payload = {
+            id: document.getElementById('selectedFoodId').value,
+            grams: parseFloat(document.getElementById('gramsInput').value)
+        };
+        await fetch(`${API}/log`, { method: 'POST', body: JSON.stringify(payload) });
+        
+        // Hide log section and refresh dashboard
+        document.getElementById('logSection').classList.add('hidden');
+        loadDashboard(); 
+    }
+</script>
+
+</body>
+</html>
