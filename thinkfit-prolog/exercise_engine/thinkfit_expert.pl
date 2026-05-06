@@ -237,7 +237,7 @@ injury_stress(knee, knees).
 injury_stress(lower_back, lower_back).
 injury_stress(shoulder, shoulder_impingement).
 
-% Maps the user's primary goal to their initial training phase
+% Maps the users primary goal to their initial training phase
 starting_phase(build_muscle, foundation_hypertrophy).
 starting_phase(lose_fat, foundation).
 starting_phase(recomposition, strength_foundation).
@@ -365,7 +365,7 @@ assign_days([Day | RestDays], Seq, Index, [day(Day, DayType) | RestCal]) :-
 
 % ======================================================================
 % 5. ELIMINATION FILTERS (Lab 5 & 8: Inference Mechanisms & Resolution Refutation)
-% Since Prolog doesn't loop through dictionaries, we use `findall/3` to 
+% Since Prolog doesnt loop through dictionaries, we use `findall/3` to 
 % query exercises that satisfy our logical constraints.
 % ======================================================================
 
@@ -402,7 +402,7 @@ filter_w8_phase(InputExercises, CurrentPhase, ValidExercises) :-
     include({CurrentPhase}/[Ex]>>is_valid_phase(Ex, CurrentPhase), InputExercises, ValidExercises).
 
 % W3: Prehab Assembly Engine
-% Finds up to 2 prehab exercises that match the user's injuries.
+% Finds up to 2 prehab exercises that match the users injuries.
 % W3: Prehab Assembly Engine (Now with 3 arguments!)
 % Finds up to 2 prehab exercises that are safe and available in the filtered database.
 find_prehab(UserInjuries, SafeDB, FinalRoutine) :-
@@ -511,24 +511,44 @@ extract_top_n([_-Ex | T], N, [Ex | Rest]) :-
 % 3. PROGRESSIVE OVERLOAD NODE BUILDER (Lab 4: Inference Engine)
 % Translates selected exercises into actionable workout nodes.
 % ======================================================================
+% ======================================================================
+% 3. PROGRESSIVE OVERLOAD NODE BUILDER (Lab 4: Inference Engine)
+% Translates selected exercises into actionable workout nodes.
+% ======================================================================
 
 build_workout_nodes([], _, _, [], []).
-build_workout_nodes([ExName | RestEx], PhaseParams, History, [Node | RestNodes], AllPrimaryMuscles) :-
+build_workout_nodes([ExName | RestEx], PhaseName, History, [Node | RestNodes], AllPrimaryMuscles) :-
     
-    % 🎯 Notice we are extracting IsCompound, Description, and YoutubeID now!
+    % 1. Extract Exercise Details
     exercise_kb(_, ExName, _, _, _, _, _, PrimaryTargets, _, _, _, IsCompound, Desc, YoutubeID),
-    phase_params(PhaseParams, BaseSets, MinR, MaxR, Style),
     
-    ( member(hist(ExName, LastSets, LastReps, LastWeight), History) ->
-        progressive_overload(Style, LastSets, LastReps, LastWeight, MinR, MaxR, NextS, NextR, NextW)
-    ;
-        NextS = BaseSets, NextR = MinR, NextW = 'Determine Base Weight'
+    % 2. THE FIX: Query the 9-argument phase_params rule!
+    phase_params(PhaseName, _Split, _Freq, CompSets, CompRepsStr, IsoSets, IsoRepsStr, _Rest, Style),
+    
+    % 3. SMART ROUTING: Assign different targets based on exercise type
+    ( IsCompound == true 
+    -> BaseSets = CompSets, BaseRepsStr = CompRepsStr
+    ;  BaseSets = IsoSets,  BaseRepsStr = IsoRepsStr
     ),
     
-    % 🎯 We add them to our final workout_node output
+    % 4. Parse the string (e.g., '8-12') into Min and Max integers for the math engine
+    (   split_string(BaseRepsStr, "-", "", [MinStr, MaxStr]),
+        number_string(MinR, MinStr), number_string(MaxR, MaxStr)
+    ->  true
+    ;   MinR = 8, MaxR = 12 % Safe fallback if the phase uses a weird string like 'timed_45_seconds'
+    ),
+    
+    % 5. Apply Progressive Overload Rules (if user has history)
+    ( member(hist(ExName, LastSets, LastReps, LastWeight), History) 
+    ->  progressive_overload(Style, LastSets, LastReps, LastWeight, MinR, MaxR, NextS, NextR, NextW)
+    ;   NextS = BaseSets, NextR = BaseRepsStr, NextW = 'Determine Base'
+    ),
+    
+    % 6. Construct the final output node
     Node = workout_node(ExName, NextS, NextR, NextW, IsCompound, Desc, YoutubeID),
     
-    build_workout_nodes(RestEx, PhaseParams, History, RestNodes, RestMuscles),
+    % 7. Recurse and aggregate muscles hit
+    build_workout_nodes(RestEx, PhaseName, History, RestNodes, RestMuscles),
     append(PrimaryTargets, RestMuscles, AllPrimaryMuscles).
 
 % ======================================================================
@@ -562,7 +582,7 @@ generate_daily_workout(UserMemory, Blueprint, PhaseName, History, FinalWorkout) 
     append(WarmupRoutine, MainRoutine, FinalWorkout).
 
 % ======================================================================
-% WEEKLY PLAN ORCHESTRATOR (Translating Python's generate_week)
+% WEEKLY PLAN ORCHESTRATOR (Translating Pythons generate_week)
 % ======================================================================
 
 % Main entry point to generate a full 7-day week
@@ -592,7 +612,7 @@ generate_week(MemoryList, History, WeeklyPlan) :-
     format('Base Split : ~w', [BaseSplit]), nl,
     
     
-    % NEW: 3.5. Execute Safety Overrides based on User's Schedule!
+    % NEW: 3.5. Execute Safety Overrides based on Users Schedule!
     length(Days, DaysCount),
     determine_weekly_split(BaseSplit, DaysCount, AssignedSplit, WarningMsg),
     
@@ -631,7 +651,7 @@ generate_workouts_for_calendar([day(DayName, rest) | RestCal], AssignedSplit, Ph
 % Generate actual workout days
 generate_workouts_for_calendar([day(DayName, DayType) | RestCal], AssignedSplit, Phase, Mem, Hist, [workout_day(DayName, DayType, DailyWorkout) | RestPlan]) :-
     
-    % 🎯 The flexible string matching! (Replacing Python's if/elif block)
+
     determine_library_category(DayType, AssignedSplit, Category),
     
     % Fetch the specific blueprint for this day
@@ -649,7 +669,7 @@ generate_workouts_for_calendar([day(DayName, DayType) | RestCal], AssignedSplit,
 % ======================================================================
 
 % ======================================================================
-% ADAPTIVE SPLIT ENGINE (Translating Python's determine_weekly_split)
+% ADAPTIVE SPLIT ENGINE (Translating Pythons determine_weekly_split)
 % ======================================================================
 
 % Helper to identify Full Body variants
